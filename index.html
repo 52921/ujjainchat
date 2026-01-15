@@ -11,7 +11,7 @@
         html, body { height: 100%; overflow: hidden; background: #0f2027; color: white; display: flex; flex-direction: column; }
         header { background: var(--glass); backdrop-filter: blur(15px); padding: 10px; display: flex; justify-content: space-between; align-items: center; z-index: 100; border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
         .btns { display: flex; gap: 4px; overflow-x: auto; max-width: 65%; }
-        .btns button { padding: 6px 8px; border-radius: 50px; border: 1px solid rgba(255,255,255,0.3); background: transparent; color: #fff; font-weight: 600; font-size: 9px; white-space: nowrap; }
+        .btns button { padding: 6px 8px; border-radius: 50px; border: 1px solid rgba(255,255,255,0.3); background: transparent; color: #fff; font-weight: 600; font-size: 9px; white-space: nowrap; cursor: pointer; }
         #video-container { display: none; grid-template-columns: 1fr 1fr; gap: 5px; padding: 5px; background: rgba(0,0,0,0.8); flex-shrink: 0; }
         .video-view { width: 100%; height: 120px; background: #000; border-radius: 10px; border: 1.5px solid var(--neon); overflow: hidden; }
         #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; background: linear-gradient(rgba(15, 32, 39, 0.9), rgba(15, 32, 39, 0.9)), url('https://www.transparenttextures.com/patterns/dark-matter.png'); -webkit-overflow-scrolling: touch; }
@@ -20,7 +20,7 @@
         .other { align-self: flex-start; background: var(--glass); color: #fff; border: 1px solid rgba(255,255,255,0.1); }
         .input-area { background: #162a31; padding: 10px; display: flex; gap: 8px; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
         .input-area input { flex: 1; padding: 12px 15px; border-radius: 25px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4); color: #fff; outline: none; font-size: 16px; }
-        .send-btn { background: var(--neon); border: none; padding: 10px 15px; border-radius: 25px; color: #000; font-weight: bold; }
+        .send-btn { background: var(--neon); border: none; padding: 10px 15px; border-radius: 25px; color: #000; font-weight: bold; cursor: pointer; }
         #login-screen { position: fixed; inset: 0; background: #0f2027; display: flex; align-items: center; justify-content: center; z-index: 1000; }
         .login-card { background: var(--glass); backdrop-filter: blur(20px); padding: 25px; border-radius: 20px; text-align: center; width: 85%; border: 1px solid rgba(255,255,255,0.1); }
     </style>
@@ -47,8 +47,8 @@
         <small id="status" style="font-size: 8px; opacity: 0.7;">ONLINE</small>
     </div>
     <div class="btns">
-        <button id="v-btn" onclick="startCall(true)">📹 VIDEO</button>
-        <button id="a-btn" onclick="startCall(false)">📞 VOICE</button>
+        <button id="v-btn" onclick="triggerCall(true)">📹 VIDEO</button>
+        <button id="a-btn" onclick="triggerCall(false)">📞 VOICE</button>
         <button id="mute-btn" onclick="toggleMute()" style="display:none;">🎤 MUTE</button>
         <button id="end-btn" onclick="stopEverything()" style="background:#ff4444; display:none;">❌ END</button>
         <button onclick="logoutSystem()" style="border:none; opacity:0.6;">EXIT</button>
@@ -57,10 +57,10 @@
 
 <div id="video-container"></div>
 <div id="chat-box"></div>
-<div id="typing-box" style="padding: 2px 15px; font-size: 10px; color: var(--neon); background: rgba(0,0,0,0.3);"></div>
+<div id="typing-box" style="padding: 2px 15px; font-size: 10px; color: var(--neon); background: rgba(0,0,0,0.3); height: 15px;"></div>
 
 <form class="input-area" id="chat-form">
-    <label style="font-size: 20px;">🖼️<input type="file" id="img-input" accept="image/*" style="display:none" onchange="uploadImage(this)"></label>
+    <label style="font-size: 20px; cursor: pointer;">🖼️<input type="file" id="img-input" accept="image/*" style="display:none" onchange="uploadImage(this)"></label>
     <input id="msg-input" placeholder="Type here..." autocomplete="off" oninput="sendTyping()">
     <button type="submit" class="send-btn">SEND</button>
 </form>
@@ -82,14 +82,20 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const colRef = collection(db, "family_chat");
 const user = localStorage.getItem("family_user");
+
+// Notification & Ring Sound
 const ringtone = new Audio('https://assets.mixkit.co/active_storage/sfx/1358/1358-preview.mp3');
 ringtone.loop = true;
 
-if (user) document.getElementById("login-screen").style.display = "none";
+if (user) {
+    document.getElementById("login-screen").style.display = "none";
+    if (Notification.permission !== 'granted') Notification.requestPermission();
+}
+
 window.login = () => { localStorage.setItem("family_user", document.getElementById("nameSelect").value); location.reload(); };
 window.logoutSystem = () => { if(confirm("Exit App?")) { localStorage.removeItem("family_user"); location.reload(); } };
 
-// --- CHAT LOGIC ---
+// --- CHAT & IMAGE LOGIC ---
 document.getElementById("chat-form").onsubmit = async (e) => {
     e.preventDefault();
     const val = document.getElementById("msg-input").value.trim();
@@ -134,12 +140,12 @@ const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 let lAudio, lVideo;
 let isMuted = false;
 
-window.startCall = async (isVideo) => {
-    await setDoc(doc(db, "call_status", "room1"), { isCalling: true, callerName: user, type: isVideo ? "VIDEO" : "VOICE" });
-    await joinAgora(isVideo);
+window.triggerCall = async (isVideo) => {
+    await setDoc(doc(db, "call_status", "room1"), { isCalling: true, callerName: user, type: isVideo ? "VIDEO" : "VOICE", time: Date.now() });
+    startCall(isVideo);
 };
 
-async function joinAgora(isVideo) {
+window.startCall = async (isVideo) => {
     await client.join("79bdf9897e5446d3a9052d69ada91767", "family_room", null);
     document.getElementById("v-btn").style.display = "none";
     document.getElementById("a-btn").style.display = "none";
@@ -154,18 +160,24 @@ async function joinAgora(isVideo) {
         document.getElementById("video-container").appendChild(div);
         lVideo.play("me-vid"); await client.publish([lAudio, lVideo]);
     } else { await client.publish([lAudio]); }
-}
+};
 
+// Ring Listener
 onSnapshot(doc(db, "call_status", "room1"), (snapshot) => {
     const data = snapshot.data();
-    if (data && data.isCalling && data.callerName !== user) {
+    if (data && data.isCalling && data.callerName !== user && (Date.now() - data.time < 30000)) {
         ringtone.play().catch(() => {});
-        if (confirm(`${data.callerName} is calling! Join?`)) {
+        if (confirm(`${data.callerName} is calling! Answer?`)) {
             ringtone.pause();
-            joinAgora(data.type === "VIDEO");
+            window.startCall(data.type === "VIDEO");
         }
     } else { ringtone.pause(); }
 });
+
+window.toggleMute = () => {
+    isMuted = !isMuted; lAudio.setMuted(isMuted);
+    document.getElementById("mute-btn").innerText = isMuted ? "🔇 UNMUTE" : "🎤 MUTE";
+};
 
 window.stopEverything = async () => {
     await setDoc(doc(db, "call_status", "room1"), { isCalling: false });
