@@ -8,42 +8,19 @@
     <style>
         :root { --glass: rgba(255, 255, 255, 0.15); --neon: #00f2fe; }
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI', sans-serif}
-        
-        html, body { height: 100%; overflow: hidden; background: #0f2027; color: white; }
-        body { display: flex; flex-direction: column; }
-
-        header { 
-            background: var(--glass); backdrop-filter: blur(15px); padding: 10px; 
-            display: flex; justify-content: space-between; align-items: center; 
-            z-index: 100; border-bottom: 1px solid rgba(255,255,255,0.1);
-            flex-shrink: 0;
-        }
-
+        html, body { height: 100%; overflow: hidden; background: #0f2027; color: white; display: flex; flex-direction: column; }
+        header { background: var(--glass); backdrop-filter: blur(15px); padding: 10px; display: flex; justify-content: space-between; align-items: center; z-index: 100; border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
         .btns { display: flex; gap: 4px; overflow-x: auto; max-width: 65%; }
         .btns button { padding: 6px 8px; border-radius: 50px; border: 1px solid rgba(255,255,255,0.3); background: transparent; color: #fff; font-weight: 600; font-size: 9px; white-space: nowrap; }
-
         #video-container { display: none; grid-template-columns: 1fr 1fr; gap: 5px; padding: 5px; background: rgba(0,0,0,0.8); flex-shrink: 0; }
         .video-view { width: 100%; height: 120px; background: #000; border-radius: 10px; border: 1.5px solid var(--neon); overflow: hidden; }
-
-        #chat-box { 
-            flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px;
-            background: linear-gradient(rgba(15, 32, 39, 0.9), rgba(15, 32, 39, 0.9)), url('https://www.transparenttextures.com/patterns/dark-matter.png');
-            -webkit-overflow-scrolling: touch;
-        }
-
+        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; background: linear-gradient(rgba(15, 32, 39, 0.9), rgba(15, 32, 39, 0.9)), url('https://www.transparenttextures.com/patterns/dark-matter.png'); -webkit-overflow-scrolling: touch; }
         .bubble { padding: 10px 15px; border-radius: 18px; max-width: 85%; font-size: 14px; backdrop-filter: blur(5px); }
         .me { align-self: flex-end; background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); color: #000; }
         .other { align-self: flex-start; background: var(--glass); color: #fff; border: 1px solid rgba(255,255,255,0.1); }
-
-        .input-area { 
-            background: #162a31; padding: 10px; display: flex; gap: 8px; 
-            align-items: center; border-top: 1px solid rgba(255,255,255,0.1);
-            flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom));
-        }
+        .input-area { background: #162a31; padding: 10px; display: flex; gap: 8px; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
         .input-area input { flex: 1; padding: 12px 15px; border-radius: 25px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4); color: #fff; outline: none; font-size: 16px; }
-        
         .send-btn { background: var(--neon); border: none; padding: 10px 15px; border-radius: 25px; color: #000; font-weight: bold; }
-
         #login-screen { position: fixed; inset: 0; background: #0f2027; display: flex; align-items: center; justify-content: center; z-index: 1000; }
         .login-card { background: var(--glass); backdrop-filter: blur(20px); padding: 25px; border-radius: 20px; text-align: center; width: 85%; border: 1px solid rgba(255,255,255,0.1); }
     </style>
@@ -91,7 +68,6 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
-import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCtsDXCwGOv8ym4RPn3EziO2O8zuaSDTGc",
@@ -104,48 +80,20 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const messaging = getMessaging(app);
 const colRef = collection(db, "family_chat");
 const user = localStorage.getItem("family_user");
+const ringtone = new Audio('https://assets.mixkit.co/active_storage/sfx/1358/1358-preview.mp3');
+ringtone.loop = true;
 
 if (user) document.getElementById("login-screen").style.display = "none";
 window.login = () => { localStorage.setItem("family_user", document.getElementById("nameSelect").value); location.reload(); };
 window.logoutSystem = () => { if(confirm("Exit App?")) { localStorage.removeItem("family_user"); location.reload(); } };
 
-// --- NOTIFICATION PERMISSION & TOKEN ---
-async function setupNotifications() {
-    try {
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-            const token = await getToken(messaging, { 
-                vapidKey: "BEqwwdJkcEC7HIumchvABIJCVOTgHjgFZejhHSRYKKclUYoTy8tklLv44NWZnXDpHBs9YJofaIngtnYz5nwExB4" 
-            });
-            if (token) {
-                console.log("FCM Token:", token);
-                await setDoc(doc(db, "user_tokens", user), { token: token, lastUpdated: serverTimestamp() });
-            }
-        }
-    } catch (err) { console.log("Notification error:", err); }
-}
-
-if (user) setupNotifications();
-
-// Foreground Message Listener
-onMessage(messaging, (payload) => {
-    const { title, body } = payload.notification;
-    new Notification(title, { body: body });
-    let audio = new Audio('https://www.soundjay.com/buttons/beep-07a.mp3');
-    audio.play();
-});
-
 // --- CHAT LOGIC ---
 document.getElementById("chat-form").onsubmit = async (e) => {
     e.preventDefault();
     const val = document.getElementById("msg-input").value.trim();
-    if(val) { 
-        await addDoc(colRef, { sender: user, text: val, type: 'text', time: serverTimestamp() }); 
-        document.getElementById("msg-input").value=""; 
-    }
+    if(val) { await addDoc(colRef, { sender: user, text: val, type: 'text', time: serverTimestamp() }); document.getElementById("msg-input").value=""; }
 };
 
 window.uploadImage = async (input) => {
@@ -181,12 +129,17 @@ onSnapshot(collection(db, "typing"), snap => {
     document.getElementById("typing-box").innerText = t.length > 0 ? t.join(", ") + " typing..." : "";
 });
 
-// --- AGORA LOGIC (Keep as is) ---
+// --- AGORA & RING SYSTEM ---
 const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 let lAudio, lVideo;
 let isMuted = false;
 
 window.startCall = async (isVideo) => {
+    await setDoc(doc(db, "call_status", "room1"), { isCalling: true, callerName: user, type: isVideo ? "VIDEO" : "VOICE" });
+    await joinAgora(isVideo);
+};
+
+async function joinAgora(isVideo) {
     await client.join("79bdf9897e5446d3a9052d69ada91767", "family_room", null);
     document.getElementById("v-btn").style.display = "none";
     document.getElementById("a-btn").style.display = "none";
@@ -201,14 +154,21 @@ window.startCall = async (isVideo) => {
         document.getElementById("video-container").appendChild(div);
         lVideo.play("me-vid"); await client.publish([lAudio, lVideo]);
     } else { await client.publish([lAudio]); }
-};
+}
 
-window.toggleMute = () => {
-    isMuted = !isMuted; lAudio.setMuted(isMuted);
-    document.getElementById("mute-btn").innerText = isMuted ? "🔇 UNMUTE" : "🎤 MUTE";
-};
+onSnapshot(doc(db, "call_status", "room1"), (snapshot) => {
+    const data = snapshot.data();
+    if (data && data.isCalling && data.callerName !== user) {
+        ringtone.play().catch(() => {});
+        if (confirm(`${data.callerName} is calling! Join?`)) {
+            ringtone.pause();
+            joinAgora(data.type === "VIDEO");
+        }
+    } else { ringtone.pause(); }
+});
 
 window.stopEverything = async () => {
+    await setDoc(doc(db, "call_status", "room1"), { isCalling: false });
     if(lAudio) { lAudio.stop(); lAudio.close(); } if(lVideo) { lVideo.stop(); lVideo.close(); }
     await client.leave(); location.reload();
 };
